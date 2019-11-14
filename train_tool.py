@@ -2,14 +2,14 @@
 import time
 import os
 from set_args import create_parser
-from net import WideResNet,cifar_shakeshake26,TCN, Full_net
-import ramps
-from losses import *
+from util.net import WideResNet,cifar_shakeshake26,TCN, Full_net
+from util import ramps
+from util.losses import *
 from torch.autograd import  Variable
 import logging
-from utils import *
-from losses import entropy_loss,SemiLoss
-import dataset
+from util.utils import *
+from util.losses import entropy_loss,SemiLoss
+import util.dataset as dataset
 import math
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
@@ -19,21 +19,10 @@ LOG = logging.getLogger('main')
 args =create_parser('tcga')
 
 
-def create_model(ema=False):
-    print("=> creating {ema}model ".format(
-        ema='EMA ' if ema else ''))
-
-    model = TCN(input_size=1, output_size=33, num_channels=[64]*10, kernel_size=2)
-#    model =  Full_net(9964,33)
-    model = nn.DataParallel(model).cuda()
-#    model = model.cuda()
-    if ema:
-        for param in model.parameters():
-            param.detach_()
-    return model
 
 
-def train(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch, scheduler=None):
+
+def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch, scheduler=None):
     labeled_train_iter = iter(train_labeled_loader)
     unlabeled_train_iter = iter(train_unlabeled_loader)
     class_criterion = nn.CrossEntropyLoss().cuda()
@@ -122,7 +111,7 @@ def train(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimi
                 'Cons {meters[cons_loss]:.4f}\t'
                 'entropy_loss {meters[entropy_loss]:.4f}'.format(
                     epoch, i, args.epoch_iteration, meters=meters))
-#    ema_optimizer.step(bn=True)
+    ema_optimizer.step(bn=True)
     return meters.averages()['class_loss/avg'],meters.averages()['cons_loss/avg']
 
 
@@ -174,11 +163,12 @@ def validate(val_loader, model, criterion):
 
 
 class WeightEMA(object):
-    def __init__(self, model, ema_model, alpha=0.999):
+    def __init__(self, model, ema_model, tmp_model=None, alpha=0.999):
         self.model = model
         self.ema_model = ema_model
         self.alpha = alpha
-        self.tmp_model = TCN(input_size=1, output_size=33, num_channels=[64]*10, kernel_size=2).cuda()
+        if tmp_model is not None:
+            self.tmp_model = tmp_model.cuda()
 #        self.tmp_model =  Full_net(9964,33).cuda()
         self.wd = 0.02 * args.lr
 
@@ -200,14 +190,7 @@ class WeightEMA(object):
             for param, ema_param in zip(self.model.parameters(), self.ema_model.parameters()):
                 ema_param.data.mul_(self.alpha)
                 ema_param.data.add_(param.data.detach() * one_minus_alpha)
-                # customized weight decay
-            for ema_param, tmp_param in zip(self.ema_model.parameters(), self.tmp_model.parameters()):
-                tmp_param.data.copy_(ema_param.data.detach())
 
-            self.ema_model.load_state_dict(self.model.state_dict())
-
-            for ema_param, tmp_param in zip(self.ema_model.parameters(), self.tmp_model.parameters()):
-                ema_param.data.copy_(tmp_param.data.detach())
 
 
 

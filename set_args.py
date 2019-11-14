@@ -42,6 +42,8 @@ def create_parser(dataset):
                             help='Number of workers')
         parser.add_argument('--epoch-iteration', type=int, default=256,
                             help='Number of workers')
+        parser.add_argument('--warmup-step', type=int, default=0,
+                            help='Number of workers')
     else:
         parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
         parser.add_argument('--epochs', default=180, type=int, metavar='N',
@@ -85,5 +87,6 @@ def create_parser(dataset):
                             help='Number of workers')
         parser.add_argument('--epoch-iteration', type=int, default=256,
                             help='Number of workers')
-
+        parser.add_argument('--warmup-step', type=int, default=0,
+                            help='Number of workers')
     return parser.parse_args()
