@@ -2,7 +2,7 @@
 import time
 import os
 from set_args import create_parser
-from net import WideResNet,cifar_shakeshake26,TCN, Full_net
+from net import cifar_shakeshake26,WideResNet
 import ramps
 from losses import *
 from torch.autograd import  Variable
@@ -13,30 +13,28 @@ import dataset
 import math
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
-
 NO_LABEL=dataset.NO_LABEL
 LOG = logging.getLogger('main')
-args =create_parser('tcga')
+args =create_parser()
 
 
 def create_model(ema=False):
     print("=> creating {ema}model ".format(
         ema='EMA ' if ema else ''))
 
-    model = TCN(input_size=1, output_size=33, num_channels=[64]*10, kernel_size=2)
-#    model =  Full_net(9964,33)
+    model = WideResNet(num_classes=10)
     model = nn.DataParallel(model).cuda()
-#    model = model.cuda()
+
     if ema:
         for param in model.parameters():
             param.detach_()
     return model
 
 
-def train(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch, scheduler=None):
-    labeled_train_iter = iter(train_labeled_loader)
-    unlabeled_train_iter = iter(train_unlabeled_loader)
-    class_criterion = nn.CrossEntropyLoss().cuda()
+def train(train_loader, model, ema_model, optimizer, epoch, scheduler=None):
+    global global_step
+
+    class_criterion = nn.CrossEntropyLoss(size_average=False, ignore_index=NO_LABEL).cuda()
     if args.consistency_type == 'mse':
         consistency_criterion = softmax_mse_loss
     elif args.consistency_type == 'kl':
@@ -51,63 +49,52 @@ def train(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimi
     ema_model.train()
 
     end = time.time()
-    for i in range(args.epoch_iteration):
-        try:
-            inputs_x, targets_x = labeled_train_iter.next()
-        except:
-            labeled_train_iter = iter(train_labeled_loader)
-            inputs_x, targets_x = labeled_train_iter.next()
-
-        try:
-            inputs_u, _ = unlabeled_train_iter.next()
-        except:
-            unlabeled_train_iter = iter(train_unlabeled_loader)
-            inputs_u,  _ = unlabeled_train_iter.next()
-
+    for i, (input, target) in enumerate(train_loader):
         # measure data loading time
         meters.update('data_time', time.time() - end)
-        inputs_x = inputs_x.cuda()
-        targets_x = targets_x.cuda(non_blocking=True)
-        outputs_x = model(inputs_x)
-    
-        class_loss = class_criterion(outputs_x, targets_x)
+
+
+        meters.update('lr', optimizer.param_groups[0]['lr'])
+
+        input_var = torch.autograd.Variable(input)
+        ema_input_var = torch.autograd.Variable(input, volatile=True)
+        target_var = torch.autograd.Variable(target.cuda(non_blocking=True))
+
+        minibatch_size = len(target_var)
+        labeled_minibatch_size = target_var.data.ne(NO_LABEL).sum()
+        with torch.no_grad():
+            ema_model_out = ema_model(ema_input_var)
+        model_out = model(input_var)
+
+
+
+
+
+        class_loss = class_criterion(model_out, target_var) / labeled_minibatch_size
         meters.update('class_loss', class_loss.item())
 
-        if args.consistency > 0:
-            outputs_u = model(inputs_u)
-            with torch.no_grad():
-                ema_inputs_u = inputs_u.cuda() 
-                ema_outputs_u = ema_model(ema_inputs_u)
-                ema_outputs_u = Variable(ema_outputs_u.detach().data, requires_grad=False)
+
+
+        if args.consistency:
             consistency_weight = get_current_consistency_weight(epoch)
             meters.update('cons_weight', consistency_weight)
-            consistency_loss = consistency_weight * consistency_criterion(outputs_u, ema_outputs_u)
+            consistency_loss = consistency_weight * consistency_criterion(model_out, ema_model_out) / minibatch_size
             meters.update('cons_loss', consistency_loss.item())
         else:
             consistency_loss = 0
             meters.update('cons_loss', 0)
 
-        if args.entropy_cost > 0:
-            outputs_u = model(inputs_u)
-            entropy_cost_weight = get_current_entropy_weight(epoch)
-            e_loss = entropy_cost_weight * entropy_loss(outputs_u)
-            meters.update('entropy_loss', e_loss.item())
-        else:
-            e_loss = 0
-            meters.update('entropy_loss', e_loss)
-        loss = class_loss + consistency_loss + e_loss
-
+        loss = class_loss + consistency_loss
+        assert not (np.isnan(loss.item()) or loss.item() > 1e5), 'Loss explosion: {}'.format(loss.item())
         meters.update('loss', loss.item())
+
+
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
-#        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01)
         optimizer.step()
-        ema_optimizer.step()
-        if scheduler is not None:
-            scheduler.step()
-
+        update_ema_variables(model, ema_model,i, args.ema_decay)
 
         # measure elapsed time
         meters.update('batch_time', time.time() - end)
@@ -119,11 +106,9 @@ def train(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimi
                 'Time {meters[batch_time]:.3f}\t'
                 'Data {meters[data_time]:.3f}\t'
                 'Class {meters[class_loss]:.4f}\t'
-                'Cons {meters[cons_loss]:.4f}\t'
-                'entropy_loss {meters[entropy_loss]:.4f}'.format(
-                    epoch, i, args.epoch_iteration, meters=meters))
-#    ema_optimizer.step(bn=True)
-    return meters.averages()['class_loss/avg'],meters.averages()['cons_loss/avg']
+                'Cons {meters[cons_loss]:.4f}'.format(
+                    epoch, i, len(train_loader), meters=meters))
+    return meters.averages()['class_loss/avg'], meters.averages()['cons_loss/avg']
 
 
 def validate(val_loader, model, criterion):
@@ -178,8 +163,7 @@ class WeightEMA(object):
         self.model = model
         self.ema_model = ema_model
         self.alpha = alpha
-        self.tmp_model = TCN(input_size=1, output_size=33, num_channels=[64]*10, kernel_size=2).cuda()
-#        self.tmp_model =  Full_net(9964,33).cuda()
+        self.tmp_model = cifar_shakeshake26(num_classes=10).cuda()
         self.wd = 0.02 * args.lr
 
         for param, ema_param in zip(self.model.parameters(), self.ema_model.parameters()):
@@ -201,18 +185,12 @@ class WeightEMA(object):
                 ema_param.data.mul_(self.alpha)
                 ema_param.data.add_(param.data.detach() * one_minus_alpha)
                 # customized weight decay
-            for ema_param, tmp_param in zip(self.ema_model.parameters(), self.tmp_model.parameters()):
-                tmp_param.data.copy_(ema_param.data.detach())
-
-            self.ema_model.load_state_dict(self.model.state_dict())
-
-            for ema_param, tmp_param in zip(self.ema_model.parameters(), self.tmp_model.parameters()):
-                ema_param.data.copy_(tmp_param.data.detach())
+                param.data.mul_(1 - self.wd)
 
 
-
-def update_ema_variables(model, ema_model,epoch, alpha=args.ema_decay):
+def update_ema_variables(model, ema_model, global_step,alpha=args.ema_decay):
     # Use the true average until the exponential average is more correct
+    alpha = min(1 - 1 / (global_step + 1), alpha)
     for ema_param, param in zip(ema_model.parameters(), model.parameters()):
         ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
 
@@ -227,11 +205,6 @@ def save_checkpoint(state,  dirpath, epoch):
 def get_current_consistency_weight(epoch):
     # Consistency ramp-up from https://arxiv.org/abs/1610.02242
     return args.consistency * ramps.sigmoid_rampup(epoch, args.consistency_rampup)
-
-
-def get_current_entropy_weight(epoch):
-    # Consistency ramp-up from https://arxiv.org/abs/1610.02242
-    return  args.entropy_cost * ramps.sigmoid_rampup(max(0,epoch-3), args.epochs)
 
 
 class WarmupCosineSchedule(LambdaLR):
@@ -252,10 +225,6 @@ class WarmupCosineSchedule(LambdaLR):
         # progress after warmup
         progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
         return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
-
-
-if __name__ == '__main__':
-    print(get_current_consistency_weight(0))
 
 
 

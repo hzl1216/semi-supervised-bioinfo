@@ -7,5 +7,3 @@ checkpoint_path/
 __pycache__/
 nohup.out
 test.py
-*.sh
-
