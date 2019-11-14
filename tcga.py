@@ -70,9 +70,9 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
 
-        logger = Logger(os.path.join(args.resume, 'log.txt'), title=title, resume=True)
+        logger = Logger(os.path.join(args.resume, 'tcga_log.txt'), title=title, resume=True)
     else:
-        logger = Logger(os.path.join(args.out_path, 'log.txt'), title=title)
+        logger = Logger(os.path.join(args.out_path, 'tcga_log.txt'), title=title)
         logger.set_names(['epoch', 'Train_class_loss',  'Train_consistency_loss', 'Val_Loss', 'Val_Acc.'])
 
     if args.evaluate:

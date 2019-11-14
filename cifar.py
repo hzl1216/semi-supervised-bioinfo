@@ -29,7 +29,7 @@ def main():
         print("=> creating {ema}model ".format(
             ema='EMA ' if ema else ''))
 
-        model = TCN(input_size=1, output_size=33, num_channels=[64] * 10, kernel_size=2)
+        model = WideResNet(num_classes=10)
         #    model =  Full_net(9964,33)
         model = nn.DataParallel(model).cuda()
         if ema:
@@ -77,9 +77,9 @@ def main():
         optimizer.load_state_dict(checkpoint['optimizer'])
         print("=> loaded checkpoint '{}' (epoch {})".format(args.resume, checkpoint['epoch']))
 
-        logger = Logger(os.path.join(args.resume, 'log.txt'), title=title, resume=True)
+        logger = Logger(os.path.join(args.resume, 'cifar10_log.txt'), title=title, resume=True)
     else:
-        logger = Logger(os.path.join(args.out_path, 'log.txt'), title=title)
+        logger = Logger(os.path.join(args.out_path, 'cifar10_log.txt'), title=title)
         logger.set_names(['epoch', 'Train_class_loss',  'Train_consistency_loss',  'Valid_Loss', 'Valid_Acc.', 'Test_Loss', 'Test_Acc.'])
 
     if args.evaluate:
