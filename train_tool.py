@@ -8,7 +8,7 @@ from util.losses import *
 from torch.autograd import  Variable
 import logging
 from util.utils import *
-from util.losses import entropy_loss,SemiLoss
+from util.losses import entropy_loss
 import util.dataset as dataset
 import math
 from torch.optim import Optimizer
@@ -17,14 +17,14 @@ from torch.optim.lr_scheduler import LambdaLR
 NO_LABEL=dataset.NO_LABEL
 LOG = logging.getLogger('main')
 args =None
-
-
-
-
-
-def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch, input_args,scheduler=None):
+def set_args(input_args):
     global args
     args = input_args
+
+
+
+
+def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch,scheduler=None):
     labeled_train_iter = iter(train_labeled_loader)
     unlabeled_train_iter = iter(train_unlabeled_loader)
     class_criterion = nn.CrossEntropyLoss().cuda()
@@ -68,7 +68,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
             ema_inputs_u = inputs_u.cuda()
             ema_outputs_u = ema_model(ema_inputs_u)
 
-            ema_outputs_u = sharpen(ema_outputs_u)
+#            ema_outputs_u = sharpen(ema_outputs_u)
             ema_outputs_u = ema_outputs_u.detach()
 
         loss,class_loss ,consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, ema_outputs_u, class_criterion, consistency_criterion,epoch)
@@ -96,8 +96,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
                 'Time {meters[batch_time]:.3f}\t'
                 'Data {meters[data_time]:.3f}\t'
                 'Class {meters[class_loss]:.4f}\t'
-                'Cons {meters[cons_loss]:.4f}\t'
-                'entropy_loss {meters[entropy_loss]:.4f}'.format(
+                'Cons {meters[cons_loss]:.4f}\t'.format(
                     epoch, i, args.epoch_iteration, meters=meters))
     ema_optimizer.step(bn=True)
     return meters.averages()['class_loss/avg'],meters.averages()['cons_loss/avg']
@@ -182,7 +181,7 @@ class WeightEMA(object):
 
 
 
-def update_ema_variables(model, ema_model,epoch, alpha=args.ema_decay):
+def update_ema_variables(model, ema_model,epoch, alpha):
     # Use the true average until the exponential average is more correct
     for ema_param, param in zip(ema_model.parameters(), model.parameters()):
         ema_param.data.mul_(alpha).add_(1 - alpha, param.data)
@@ -237,7 +236,7 @@ class WarmupCosineSchedule(LambdaLR):
 
 
 
-def semiLoss(self, outputs_x, targets_x, outputs_u, targets_u, class_criterion, consistency_criterion,epoch):
+def semiLoss(outputs_x, targets_x, outputs_u, targets_u, class_criterion, consistency_criterion,epoch):
     class_loss = class_criterion(outputs_x,targets_x)
     consistency_loss = consistency_criterion(outputs_u,targets_u)
     consistency_weight = ramps.sigmoid_rampup(epoch, args.consistency_rampup)
