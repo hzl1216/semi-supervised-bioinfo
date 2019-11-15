@@ -16,13 +16,15 @@ from torch.optim.lr_scheduler import LambdaLR
 
 NO_LABEL=dataset.NO_LABEL
 LOG = logging.getLogger('main')
-args =create_parser('tcga')
+args =None
 
 
 
 
 
-def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch, scheduler=None):
+def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch, input_args,scheduler=None):
+    global args
+    args = input_args
     labeled_train_iter = iter(train_labeled_loader)
     unlabeled_train_iter = iter(train_unlabeled_loader)
     class_criterion = nn.CrossEntropyLoss().cuda()
@@ -59,38 +61,21 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
         targets_x = targets_x.cuda(non_blocking=True)
         outputs_x = model(inputs_x)
     
-        class_loss = class_criterion(outputs_x, targets_x)
-        meters.update('class_loss', class_loss.item())
 
-        if args.consistency > 0:
-            outputs_u = model(inputs_u)
-            with torch.no_grad():
-                ema_inputs_u = inputs_u.cuda() 
-                ema_outputs_u = ema_model(ema_inputs_u)
-#                pt = torch.softmax(ema_outputs_u, dim=1)
-#                pt = pt**2
-#                ema_outputs_u  = pt / pt.sum(dim=1, keepdim=True)
-                ema_outputs_u = ema_outputs_u.detach()
-            consistency_weight = get_current_consistency_weight(epoch)
-            meters.update('cons_weight', consistency_weight)
-            consistency_loss = consistency_weight * consistency_criterion(outputs_u, ema_outputs_u)
-            meters.update('cons_loss', consistency_loss.item())
-        else:
-            consistency_loss = 0
-            meters.update('cons_loss', 0)
 
-        if args.entropy_cost > 0:
-            outputs_u = model(inputs_u)
-            entropy_cost_weight = get_current_entropy_weight(epoch)
-            e_loss = entropy_cost_weight * entropy_loss(outputs_u)
-            meters.update('entropy_loss', e_loss.item())
-        else:
-            e_loss = 0
-            meters.update('entropy_loss', e_loss)
-        loss = class_loss + consistency_loss + e_loss
+        outputs_u = model(inputs_u)
+        with torch.no_grad():
+            ema_inputs_u = inputs_u.cuda()
+            ema_outputs_u = ema_model(ema_inputs_u)
+
+            ema_outputs_u = sharpen(ema_outputs_u)
+            ema_outputs_u = ema_outputs_u.detach()
+
+        loss,class_loss ,consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, ema_outputs_u, class_criterion, consistency_criterion,epoch)
 
         meters.update('loss', loss.item())
-
+        meters.update('class_loss', class_loss.item())
+        meters.update('cons_loss', consistency_loss.item())
         # compute gradient and do SGD step
         optimizer.zero_grad()
         loss.backward()
@@ -224,6 +209,13 @@ def get_current_entropy_weight(epoch):
         return 0
 
 
+def sharpen(outputs):
+    outputs = torch.softmax(outputs, dim=1)
+    outputs = outputs**2
+    outputs  = outputs / outputs.sum(dim=1, keepdim=True)
+    return outputs
+
+
 class WarmupCosineSchedule(LambdaLR):
     """ Linear warmup and then cosine decay.
         Linearly increases learning rate from 0 to 1 over `warmup_steps` training steps.
@@ -243,6 +235,14 @@ class WarmupCosineSchedule(LambdaLR):
         progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
         return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
 
+
+
+def semiLoss(self, outputs_x, targets_x, outputs_u, targets_u, class_criterion, consistency_criterion,epoch):
+    class_loss = class_criterion(outputs_x,targets_x)
+    consistency_loss = consistency_criterion(outputs_u,targets_u)
+    consistency_weight = ramps.sigmoid_rampup(epoch, args.consistency_rampup)
+
+    return class_loss + consistency_weight*consistency_loss, class_loss, consistency_loss
 
 if __name__ == '__main__':
     print(get_current_consistency_weight(0))

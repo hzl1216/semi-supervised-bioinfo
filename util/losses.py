@@ -12,7 +12,6 @@ from torch.nn import functional as F
 import torch.nn as nn
 
 
-
 def softmax_mse_loss(input_logits, target_logits):
     """Takes softmax on both sides and returns MSE loss
 
@@ -60,10 +59,6 @@ def entropy_loss(output):
     loss = - torch.mean(torch.mul(softmax(output), logsoftmax(output)))
     return loss
 
-class SemiLoss(object):
-    def __call__(self, outputs_x, targets_x):
-        Lx = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
 
-        return Lx
 
 
