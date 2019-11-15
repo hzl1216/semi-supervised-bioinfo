@@ -59,25 +59,29 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
         meters.update('data_time', time.time() - end)
 
 
-
+        inputs_x = inputs_x.cuda()
+        batch_size = inputs_x.size(0)
+        targets_x_onehot= torch.zeros(batch_size, 33).scatter_(1, targets_x.view(-1,1), 1)
+        targets_x = targets_x.cuda(non_blocking=True)
+        
+        inputs_u = inputs_u.cuda()
         outputs_u = model(inputs_u)
         with torch.no_grad():
             ema_inputs_u = inputs_u.cuda()
             ema_outputs_u = ema_model(ema_inputs_u)
-
-#            ema_outputs_u = sharpen(ema_outputs_u)
+            if args.mixup:
+                ema_outputs_u = sharpen(ema_outputs_u)
             ema_outputs_u = ema_outputs_u.detach()
         if args.mixup:
+            targets_x = targets_x_onehot.cuda()
             all_inputs = torch.cat([inputs_x, inputs_u], dim=0)
-            all_targets = torch.cat([targets_x, targets_u], dim=0)
-            batch_size = inputs_x.size(0)
-            outputs_x,outputs_u = mixup(all_inputs,all_targets,batch_size)
+            all_targets = torch.cat([targets_x, ema_outputs_u], dim=0)
+            outputs_x,outputs_u,targets_x,targets_u = mixup(all_inputs,all_targets,batch_size,model)
+            loss,class_loss ,consistency_loss = semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u,epoch)
         else:
-            inputs_x = inputs_x.cuda()
-            targets_x = targets_x.cuda(non_blocking=True)
             outputs_x = model(inputs_x)
 
-        loss,class_loss ,consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, ema_outputs_u, class_criterion, consistency_criterion,epoch)
+            loss,class_loss ,consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, ema_outputs_u, class_criterion, consistency_criterion,epoch)
 
         meters.update('loss', loss.item())
         meters.update('class_loss', class_loss.item())
@@ -240,7 +244,7 @@ class WarmupCosineSchedule(LambdaLR):
         progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
         return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
 
-def mixup(all_inputs,all_targets,batch_size):
+def mixup(all_inputs,all_targets,batch_size,model):
     l = np.random.beta(args.alpha, args.alpha)
 
     l = max(l, 1 - l)
@@ -265,15 +269,43 @@ def mixup(all_inputs,all_targets,batch_size):
     logits = interleave(logits, batch_size)
     logits_x = logits[0]
     logits_u = torch.cat(logits[1:], dim=0)
-    return logits_x,logits_u
+    return logits_x,logits_u, mixed_target[:batch_size], mixed_target[batch_size:]
 
 def semiLoss(outputs_x, targets_x, outputs_u, targets_u, class_criterion, consistency_criterion,epoch):
     class_loss = class_criterion(outputs_x,targets_x)
     consistency_loss = consistency_criterion(outputs_u,targets_u)
-    consistency_weight = ramps.sigmoid_rampup(epoch, args.consistency_rampup)
+    consistency_weight = ramps.linear_rampup(epoch, args.epochs)
 
     return class_loss + consistency_weight*consistency_loss, class_loss, consistency_loss
 
+
+def semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u, epoch):
+    probs_u = torch.softmax(outputs_u, dim=1)
+    class_loss = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
+    consistency_loss = torch.mean((probs_u - targets_u)**2)
+    consistency_weight = ramps.sigmoid_rampup(epoch, args.consistency_rampup)
+    return class_loss + consistency_weight*consistency_loss, class_loss, consistency_loss
+
+
+
+def interleave_offsets(batch, nu):
+    groups = [batch // (nu + 1)] * (nu + 1)
+    for x in range(batch - sum(groups)):
+        groups[-x - 1] += 1
+    offsets = [0]
+    for g in groups:
+        offsets.append(offsets[-1] + g)
+    assert offsets[-1] == batch
+    return offsets
+
+
+def interleave(xy, batch):
+    nu = len(xy) - 1
+    offsets = interleave_offsets(batch, nu)
+    xy = [[v[offsets[p]:offsets[p + 1]] for p in range(nu + 1)] for v in xy]
+    for i in range(1, nu + 1):
+        xy[0][i], xy[i][i] = xy[i][i], xy[0][i]
+    return [torch.cat(v, dim=0) for v in xy]
 if __name__ == '__main__':
     print(get_current_consistency_weight(0))
 
