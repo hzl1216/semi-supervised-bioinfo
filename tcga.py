@@ -11,7 +11,7 @@ def main():
         print("=> creating {ema}model ".format(
             ema='EMA ' if ema else ''))
 
-        model = TCN(input_size=1, output_size=33, num_channels=[64] * 10, kernel_size=2)
+        model = TCN(input_size=1, output_size=33, num_channels=[32] *12, kernel_size=2)
         #    model =  Full_net(9964,33)
         model = nn.DataParallel(model).cuda()
         if ema:
@@ -48,7 +48,7 @@ def main():
 
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
     ema_optimizer = WeightEMA(model, ema_model, tmp_model, alpha=args.ema_decay)
     cudnn.benchmark = True
     if args.warmup_step>0:

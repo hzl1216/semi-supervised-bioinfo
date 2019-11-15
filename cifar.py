@@ -55,7 +55,7 @@ def main():
     # print(parameters_string(model))
 
     criterion = nn.CrossEntropyLoss().cuda()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr)
     ema_optimizer = WeightEMA(model, ema_model, tmp_model,alpha=args.ema_decay)
     cudnn.benchmark = True
     if args.warmup_step>0:

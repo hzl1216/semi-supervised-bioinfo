@@ -2,7 +2,7 @@
 import time
 import os
 from set_args import create_parser
-from util.net import WideResNet,cifar_shakeshake26,TCN, Full_net
+from util.net import WideResNet,TCN, Full_net
 from util import ramps
 from util.losses import *
 from torch.autograd import  Variable
@@ -67,7 +67,10 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
             with torch.no_grad():
                 ema_inputs_u = inputs_u.cuda() 
                 ema_outputs_u = ema_model(ema_inputs_u)
-                ema_outputs_u = Variable(ema_outputs_u.detach().data, requires_grad=False)
+#                pt = torch.softmax(ema_outputs_u, dim=1)
+#                pt = pt**2
+#                ema_outputs_u  = pt / pt.sum(dim=1, keepdim=True)
+                ema_outputs_u = ema_outputs_u.detach()
             consistency_weight = get_current_consistency_weight(epoch)
             meters.update('cons_weight', consistency_weight)
             consistency_loss = consistency_weight * consistency_criterion(outputs_u, ema_outputs_u)
@@ -190,7 +193,7 @@ class WeightEMA(object):
             for param, ema_param in zip(self.model.parameters(), self.ema_model.parameters()):
                 ema_param.data.mul_(self.alpha)
                 ema_param.data.add_(param.data.detach() * one_minus_alpha)
-
+                param.data.mul_(1 - args.weight_decay)
 
 
 
@@ -213,8 +216,12 @@ def get_current_consistency_weight(epoch):
 
 
 def get_current_entropy_weight(epoch):
+    if epoch>args.consistency_rampup:
+            
     # Consistency ramp-up from https://arxiv.org/abs/1610.02242
-    return  args.entropy_cost * ramps.sigmoid_rampup(max(0,epoch-3), args.epochs)
+        return  args.entropy_cost 
+    else:
+        return 0
 
 
 class WarmupCosineSchedule(LambdaLR):

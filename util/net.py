@@ -150,23 +150,27 @@ class TemporalConvNet(nn.Module):
 
 class TCN(nn.Module):
 
-    def __init__(self, input_size, output_size, num_channels,
-                 kernel_size=2, dropout=0.2):
+    def __init__(self, input_size, output_size, num_channels,length=626,step=16,
+                 kernel_size=2, dropout=0.5):
         super(TCN, self).__init__()
+        self.length = length
+        self.step = step
         self.tcn = TemporalConvNet(input_size, num_channels, kernel_size=kernel_size, dropout=dropout)
-        self.linear = nn.Linear(num_channels[-1]*622, output_size)
+        self.conv1 = nn.Conv1d(num_channels[-1], 33, kernel_size=length)
         self.dropout= nn.Dropout(dropout)
         self.init_weights()
     def init_weights(self):
-        init.xavier_uniform_(self.linear.weight)
+        init.xavier_uniform_(self.conv1.weight)
+#        init.xavier_uniform_(self.conv2.weight)
     def forward(self, inputs):
         """Inputs have to have dimension (N, C_in, L_in)"""
         inputs = inputs.reshape(inputs.size(0),1,inputs.size(1))
         x = self.tcn(inputs)  # input should have dimension (N, C, L)
-        x = F.avg_pool1d(x,kernel_size=16,stride=16)
-        x = x.reshape(x.size(0),-1) 
+        x = F.avg_pool1d(x,kernel_size=self.step,stride=self.step)
+#        x = self.conv1(x)
         x = self.dropout(x)
-        x = self.linear(x)
+        x = self.conv1(x)
+        x= x.reshape(x.size(0),-1)
         return x
 
 
@@ -194,4 +198,5 @@ class Full_net(nn.Module):
         x = self.dropout2(x)
         x = self.linear3(x)
         return x
+
 

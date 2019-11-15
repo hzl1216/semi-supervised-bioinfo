@@ -20,7 +20,7 @@ def feature_selection_and_sort_by_chromosome(data, annotation_path, preprocessed
     feature_name=np.array(feature_name)[idx]
     features_raw = np.array(big_table.iloc[:, 1:])
     features = np.log2(1.0 + features_raw)
-#    features[np.where(features <= 1)] = 0
+    features[np.where(features <= 1)] = 0
     # numpy is different from lis
     features = features[:, idx]
     print('remove the features that  Variance is low than threshold') 

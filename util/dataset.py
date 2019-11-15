@@ -226,7 +226,7 @@ def get_tcga(root,n_labeled,transform_train=None,transform_val=None):
     val_dataset = TCGA_labeled(base_dataset, val_idxs, transform=transform_val )
 
 
-    print(f"#Labeled: {len(train_labeled_dataset)} #Unlabeled: {len(train_unlabeled_dataset)} #Val: {len(val_dataset)}")
+    print(f"#Labeled: {len(train_labeled_dataset)}  #Val: {len(val_dataset)}")
     return train_labeled_dataset, train_unlabeled_dataset, val_dataset
 
 if __name__ == '__main__':
