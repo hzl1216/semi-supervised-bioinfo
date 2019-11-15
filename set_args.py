@@ -1,5 +1,6 @@
 import argparse
 import logging
+from util.utils import str2bool
 def create_parser(dataset):
     if dataset is 'cifar10':
         parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
@@ -44,6 +45,9 @@ def create_parser(dataset):
                             help='Number of workers')
         parser.add_argument('--warmup-step', type=int, default=0,
                             help='Number of workers')
+        parser.add_argument('--alpha', default=0.75, type=float)
+        parser.add_argument('--mixup', default=False, type=str2bool,
+                            help='use mixup', metavar='BOOL')
     else:
         parser = argparse.ArgumentParser(description='PyTorch ImageNet Training')
         parser.add_argument('--epochs', default=180, type=int, metavar='N',
@@ -89,4 +93,7 @@ def create_parser(dataset):
                             help='Number of workers')
         parser.add_argument('--warmup-step', type=int, default=0,
                             help='Number of workers')
+        parser.add_argument('--alpha', default=0.75, type=float)
+        parser.add_argument('--mixup', default=False, type=str2bool,
+                            help='use mixup', metavar='BOOL')
     return parser.parse_args()

@@ -57,10 +57,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
 
         # measure data loading time
         meters.update('data_time', time.time() - end)
-        inputs_x = inputs_x.cuda()
-        targets_x = targets_x.cuda(non_blocking=True)
-        outputs_x = model(inputs_x)
-    
+
 
 
         outputs_u = model(inputs_u)
@@ -70,6 +67,15 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
 
 #            ema_outputs_u = sharpen(ema_outputs_u)
             ema_outputs_u = ema_outputs_u.detach()
+        if args.mixup:
+            all_inputs = torch.cat([inputs_x, inputs_u], dim=0)
+            all_targets = torch.cat([targets_x, targets_u], dim=0)
+            batch_size = inputs_x.size(0)
+            outputs_x,outputs_u = mixup(all_inputs,all_targets,batch_size)
+        else:
+            inputs_x = inputs_x.cuda()
+            targets_x = targets_x.cuda(non_blocking=True)
+            outputs_x = model(inputs_x)
 
         loss,class_loss ,consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, ema_outputs_u, class_criterion, consistency_criterion,epoch)
 
@@ -234,7 +240,32 @@ class WarmupCosineSchedule(LambdaLR):
         progress = float(step - self.warmup_steps) / float(max(1, self.t_total - self.warmup_steps))
         return max(0.0, 0.5 * (1. + math.cos(math.pi * float(self.cycles) * 2.0 * progress)))
 
+def mixup(all_inputs,all_targets,batch_size):
+    l = np.random.beta(args.alpha, args.alpha)
 
+    l = max(l, 1 - l)
+
+    idx = torch.randperm(all_inputs.size(0))
+
+    input_a, input_b = all_inputs, all_inputs[idx]
+    target_a, target_b = all_targets, all_targets[idx]
+
+    mixed_input = l * input_a + (1 - l) * input_b
+    mixed_target = l * target_a + (1 - l) * target_b
+
+    # interleave labeled and unlabed samples between batches to get correct batchnorm calculation
+    mixed_input = list(torch.split(mixed_input, batch_size))
+    mixed_input = interleave(mixed_input, batch_size)
+
+    logits = [model(mixed_input[0])]
+    for input in mixed_input[1:]:
+        logits.append(model(input))
+
+    # put interleaved samples back
+    logits = interleave(logits, batch_size)
+    logits_x = logits[0]
+    logits_u = torch.cat(logits[1:], dim=0)
+    return logits_x,logits_u
 
 def semiLoss(outputs_x, targets_x, outputs_u, targets_u, class_criterion, consistency_criterion,epoch):
     class_loss = class_criterion(outputs_x,targets_x)
