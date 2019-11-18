@@ -220,8 +220,8 @@ def get_current_entropy_weight(epoch):
 
 def sharpen(outputs):
     outputs = torch.softmax(outputs, dim=1)
-#    outputs = outputs**2
-#    outputs  = outputs / outputs.sum(dim=1, keepdim=True)
+    outputs = outputs**2
+    outputs  = outputs / outputs.sum(dim=1, keepdim=True)
     return outputs
 
 
