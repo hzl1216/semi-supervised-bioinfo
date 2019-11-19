@@ -3,7 +3,7 @@ import torchvision.transforms as transforms
 import torch.backends.cudnn as cudnn
 import torch.optim as optim
 import torch.utils.data as data
-from util.dataset import get_cifar10,get_tcga
+from util.dataset import get_cifar10,get_tcga,RandomErasing
 
 
 def main():
@@ -25,6 +25,7 @@ def main():
     print(f'==> Preparing tcga data')
 
     transform_train = transforms.Compose([
+        RandomErasing(),
         dataset.ToTensor(),
 
     ])

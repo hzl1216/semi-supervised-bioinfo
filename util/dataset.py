@@ -6,6 +6,7 @@ import torchvision
 import torch
 import torch.utils.data as data
 import _pickle as cPickle
+import random
 NO_LABEL = -1
 
 
@@ -187,7 +188,35 @@ class TCGA_unlabeled(TCGA_labeled):
         self.targets = np.array([-1 for _ in range(len(self.targets))])
 
 
+class RandomErasing(object):
+    '''
+    Class that performs Random Erasing in Random Erasing Data Augmentation by Zhong et al.
+    -------------------------------------------------------------------------------------
+    probability: The probability that the operation will be performed.
+    sl: min erasing area
+    sh: max erasing area
+    r1: min aspect ratio
+    mean: erasing value
+    -------------------------------------------------------------------------------------
+    '''
 
+    def __init__(self, probability=0.5, sl=0.02, sh=0.2, erasing_value=0):
+        self.probability = probability
+        self.erasing_value = erasing_value
+        self.sl = sl
+        self.sh = sh
+    def __call__(self, data):
+        if random.uniform(0, 1) > self.probability:
+            return data
+        length = len(data)
+        for _ in range(100):
+            erasing_length = int(random.uniform(self.sl, self.sh) * length)
+            if erasing_length < length:
+                x = random.randint(0, length - erasing_length)
+
+                data[x:x+erasing_length] = self.erasing_value
+                return data
+        return data
 
 
 
