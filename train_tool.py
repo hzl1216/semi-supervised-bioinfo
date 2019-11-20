@@ -92,6 +92,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
 #        torch.nn.utils.clip_grad_norm_(model.parameters(), 0.01)
         optimizer.step()
         ema_optimizer.step()
+        ema_optimizer.step(bn=True)
         if scheduler is not None:
             scheduler.step()
 
