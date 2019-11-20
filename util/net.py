@@ -227,14 +227,14 @@ class ResNet(nn.Module):
 
         self.conv1 = Conv1(in_planes = 1, places= 32)
 
-        self.layer1 = self.make_layer(in_places = 32, places= 16, block=blocks[0], stride=3)
-        self.layer2 = self.make_layer(in_places = 64,places=32, block=blocks[1], stride=3)
-        self.layer3 = self.make_layer(in_places=128,places=64, block=blocks[2], stride=3)
-        self.layer4 = self.make_layer(in_places=256,places=128, block=blocks[3], stride=3)
+        self.layer1 = self.make_layer(in_places = 32, places= 16, block=blocks[0], stride=2)
+        self.layer2 = self.make_layer(in_places = 64,places=32, block=blocks[1], stride=2)
+        self.layer3 = self.make_layer(in_places=128,places=64, block=blocks[2], stride=2)
+        self.layer4 = self.make_layer(in_places=256,places=128, block=blocks[3], stride=2)
 
-        self.avgpool = nn.AvgPool1d(7, stride=1)
-        self.dropout = dropout
-        self.fc = nn.Linear(12800,num_classes)
+        self.avgpool = nn.AvgPool1d(7, stride=7)
+        self.dropout = nn.Dropout(dropout)
+        self.fc = nn.Linear(11264,num_classes)
         
         for m in self.modules():
             if isinstance(m, nn.Conv1d):

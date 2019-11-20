@@ -54,9 +54,9 @@ def create_parser(dataset):
                             help='number of total epochs to run')
         parser.add_argument('--start-epoch', default=0, type=int, metavar='N',
                             help='manual epoch number (useful on restarts)')
-        parser.add_argument('--unlabeled-batch-size', default=30, type=int,
+        parser.add_argument('--unlabeled-batch-size', default=60, type=int,
                             metavar='N', help='unlabeled-batch size (default: 128)')
-        parser.add_argument('--labeled-batch-size', default=30, type=int,
+        parser.add_argument('--labeled-batch-size', default=60, type=int,
                             metavar='N', help='labeled-batch size (default: 128)')
         parser.add_argument('--lr', '--learning-rate', default=0.002, type=float)
         parser.add_argument('--weight-decay', '--wd', default=1e-4, type=float,
