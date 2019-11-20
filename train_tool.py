@@ -2,7 +2,7 @@
 import time
 import os
 from set_args import create_parser
-from util.net import WideResNet,TCN, Full_net
+from util.net import WideResNet,TCN, ResNet50
 from util import ramps
 from util.losses import *
 from torch.autograd import  Variable

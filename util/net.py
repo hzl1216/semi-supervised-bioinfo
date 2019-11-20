@@ -174,29 +174,103 @@ class TCN(nn.Module):
         return x
 
 
+from torch.nn.utils import weight_norm
+import torch.nn.init as init
 
-class Full_net(nn.Module):
-    def __init__(self, input_size,output_size, dropout=0.2):
-        super(Full_net, self).__init__()
-        self.linear1 = nn.Linear(input_size, 1024)
-        self.linear2 = nn.Linear(1024, 256)
-        self.linear3 = nn.Linear(256, output_size)
-        self.dropout1= nn.Dropout(dropout)
-        self.dropout2= nn.Dropout(dropout)
+def Conv1(in_planes, places, stride=2):
+    return nn.Sequential(
+        nn.Conv1d(in_channels=in_planes,out_channels=places,kernel_size=3,stride=stride,padding=1, bias=False),
+        nn.BatchNorm1d(places),
+        nn.ReLU(inplace=True),
+        nn.MaxPool1d(kernel_size=3, stride=2, padding=1)
+    )
+
+class Bottleneck(nn.Module):
+    def __init__(self,in_places,places, stride=1,downsampling=False, expansion = 4):
+        super(Bottleneck,self).__init__()
+        self.expansion = expansion
+        self.downsampling = downsampling
+
+        self.bottleneck = nn.Sequential(
+            nn.Conv1d(in_channels=in_places,out_channels=places,kernel_size=1,stride=1, bias=False),
+            nn.BatchNorm1d(places),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(in_channels=places, out_channels=places, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.BatchNorm1d(places),
+            nn.ReLU(inplace=True),
+            nn.Conv1d(in_channels=places, out_channels=places*self.expansion, kernel_size=1, stride=1, bias=False),
+            nn.BatchNorm1d(places*self.expansion),
+        )
+
+        if self.downsampling:
+            self.downsample = nn.Sequential(
+                nn.Conv1d(in_channels=in_places, out_channels=places*self.expansion, kernel_size=1, stride=stride, bias=False),
+                nn.BatchNorm1d(places*self.expansion)
+            )
+        self.relu = nn.ReLU(inplace=True)
+    def forward(self, x):
+        residual = x
+        out = self.bottleneck(x)
+
+        if self.downsampling:
+            residual = self.downsample(x)
+
+        out += residual
+        out = self.relu(out)
+        return out
 
 
-        self.init_weights()
-    def init_weights(self):
-        init.xavier_uniform_(self.linear1.weight)
-        init.xavier_uniform_(self.linear2.weight)
-        init.xavier_uniform_(self.linear3.weight)
+class ResNet(nn.Module):
+    def __init__(self,blocks, num_classes=9, expansion = 4, dropout=0.5):
+        super(ResNet,self).__init__()
+        self.expansion = expansion
 
-    def forward(self,x):
-        x = self.linear1(x)
-        x = self.dropout1(x)
-        x = self.linear2(x)
-        x = self.dropout2(x)
-        x = self.linear3(x)
+        self.conv1 = Conv1(in_planes = 1, places= 32)
+
+        self.layer1 = self.make_layer(in_places = 32, places= 16, block=blocks[0], stride=3)
+        self.layer2 = self.make_layer(in_places = 64,places=32, block=blocks[1], stride=3)
+        self.layer3 = self.make_layer(in_places=128,places=64, block=blocks[2], stride=3)
+        self.layer4 = self.make_layer(in_places=256,places=128, block=blocks[3], stride=3)
+
+        self.avgpool = nn.AvgPool1d(7, stride=1)
+        self.dropout = dropout
+        self.fc = nn.Linear(12800,num_classes)
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv1d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm1d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def make_layer(self, in_places, places, block, stride):
+        layers = []
+        layers.append(Bottleneck(in_places, places,stride, downsampling =True))
+        for i in range(1, block):
+            layers.append(Bottleneck(places*self.expansion, places))
+
+        return nn.Sequential(*layers)
+
+
+    def forward(self, x):
+        x = x.reshape(x.size(0),1,x.size(1))
+        x = self.conv1(x)
+
+        x = self.layer1(x)
+
+        x = self.layer2(x)
+
+        x = self.layer3(x)
+
+        x = self.layer4(x)
+
+        x = self.avgpool(x)
+        
+        x = x.view(x.size(0), -1)
+        x = self.dropout(x)
+        x = self.fc(x)
         return x
 
 
+def ResNet50(num_classes):
+    return ResNet([3, 4, 6, 3],num_classes)

@@ -11,8 +11,8 @@ def main():
         print("=> creating {ema}model ".format(
             ema='EMA ' if ema else ''))
 
-        model = TCN(input_size=1, output_size=33, num_channels=[32] *12, kernel_size=2)
-        #    model =  Full_net(9964,33)
+#        model = TCN(input_size=1, output_size=33, num_channels=[32] *12, kernel_size=2)
+        model = ResNet50(33)
         model = nn.DataParallel(model).cuda()
         if ema:
             for param in model.parameters():
