@@ -13,7 +13,7 @@ import util.dataset as dataset
 import math
 from torch.optim import Optimizer
 from torch.optim.lr_scheduler import LambdaLR
-
+from sklearn.metrics import confusion_matrix
 NO_LABEL=dataset.NO_LABEL
 LOG = logging.getLogger('main')
 args =None
@@ -109,11 +109,11 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
                 'Class {meters[class_loss]:.4f}\t'
                 'Cons {meters[cons_loss]:.4f}\t'.format(
                     epoch, i, args.epoch_iteration, meters=meters))
-    ema_optimizer.step(bn=True)
+#    ema_optimizer.step(bn=True)
     return meters.averages()['class_loss/avg'],meters.averages()['cons_loss/avg']
 
 
-def validate(val_loader, model, criterion):
+def validate(val_loader, model, criterion,epoch):
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
@@ -124,24 +124,33 @@ def validate(val_loader, model, criterion):
     model.eval()
 
     end = time.time()
-
+    all_labels = None
+    all_outputs = None
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(val_loader):
             # measure data loading time
             data_time.update(time.time() - end)
-
             inputs, targets = inputs.cuda(), targets.cuda(non_blocking=True)
 
             # compute output
             outputs = model(inputs)
             loss = criterion(outputs, targets)
+            
+            if all_labels is None:
+                all_labels = targets
+                all_outputs = outputs
+            else:
+                all_labels = torch.cat([all_labels,targets],dim=0)
+                all_outputs = torch.cat([all_outputs,outputs],dim=0)
+
 
             # measure accuracy and record loss
             prec1, prec5 = accuracy(outputs, targets, topk=(1, 5))
+
             losses.update(loss.item(), inputs.size(0))
             top1.update(prec1.item(), inputs.size(0))
             top5.update(prec5.item(), inputs.size(0))
-
+            
             # measure elapsed time
             batch_time.update(time.time() - end)
             end = time.time()
@@ -157,6 +166,8 @@ def validate(val_loader, model, criterion):
                     top1=top1.avg,
                     top5=top5.avg,
                 ))
+    conf_matrix = confusion_matrix(all_outputs, all_labels)
+    plot_confusion_matrix(conf_matrix.numpy(),epoch)
     return losses.avg, top1.avg
 
 
@@ -307,6 +318,14 @@ def interleave(xy, batch):
     for i in range(1, nu + 1):
         xy[0][i], xy[i][i] = xy[i][i], xy[0][i]
     return [torch.cat(v, dim=0) for v in xy]
+
+def confusion_matrix(preds, labels, n_class=33):
+    conf_matrix= torch.zeros(n_class, n_class)
+    preds = torch.argmax(preds, 1)
+    for p, t in zip(preds, labels):
+        conf_matrix[p, t] += 1
+    return conf_matrix
+
 if __name__ == '__main__':
     print(get_current_consistency_weight(0))
 

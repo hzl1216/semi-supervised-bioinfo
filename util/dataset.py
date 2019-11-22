@@ -121,20 +121,21 @@ class CIFAR10_unlabeled(CIFAR10_labeled):
 
 
 class TCGA_DATASET(data.Dataset):
-    def __init__(self,root,transform=None, target_transform=None,):
+    def __init__(self,root,train=True,transform=None, target_transform=None,):
         self.root = root
         self.transform=transform
         self.target_transform=target_transform
         self.data =[]
         self.targets=[]
-         
-        df = pd.read_csv(root+'/feature_name.csv')
+        if train:
+            df = pd.read_csv(root+'/train.csv')
+        else:
+            df = pd.read_csv(root+'/test.csv')
 #        df = pd.read_csv(root+'/dlbc.csv')
         
             
         self.data = np.array(df.iloc[:, 1:])
         self.targets=np.array(df.iloc[:, 0]-1)
-        self.targets.astype(int)
 
     def __getitem__(self, index):
 
@@ -147,7 +148,7 @@ class TCGA_DATASET(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target)
 
-        return data, target
+        return data, int(target)
 
     def __len__(self):
         return  len(self.targets)
@@ -156,7 +157,7 @@ class TCGA_DATASET(data.Dataset):
         f = open('label_dict', 'wb')
         cPickle.dump(self.label_dict, f)
 
-class TCGA_labeled(data.Dataset):
+class TCGA_labeled(TCGA_DATASET):
     def __init__(self, tcga_dataset, indexs=None, transform=None, target_transform=None, ):
         self.data = tcga_dataset.data
         self.targets = tcga_dataset.targets
@@ -165,21 +166,6 @@ class TCGA_labeled(data.Dataset):
         if indexs is not None:
             self.data = self.data[indexs]
             self.targets = np.array(self.targets)[indexs]
-    def __getitem__(self, index):
-
-        data = self.data[index]
-        target = self.targets[index]
-
-        if self.transform is not None:
-            data = self.transform(data)
-
-        if self.target_transform is not None:
-            target = self.target_transform(target)
-
-        return data,int( target)
-
-    def __len__(self):
-        return  len(self.targets)
 
 
 class TCGA_unlabeled(TCGA_labeled):
@@ -221,38 +207,34 @@ class RandomErasing(object):
 
 
 def get_tcga(root,n_labeled,transform_train=None,transform_val=None):
-    def train_val_split_random(labels, n_labeled, n_val, randomtype='all'):
+    def train_val_split_random(labels, n_labeled, randomtype='all'):
 
         train_labeled_idxs = []
         train_unlabeled_idxs = []
-        val_idxs = []
         if randomtype == 'type':
             for i in range(33):
                 idxs = np.where(labels == i)[0]
                 np.random.shuffle(idxs)
                 train_labeled_idxs.extend(idxs[:n_labeled // 33])
-                train_unlabeled_idxs.extend(idxs[n_labeled // 33:-n_val // 33])
-                val_idxs.extend(idxs[-n_val // 33:])
+                train_unlabeled_idxs.extend(idxs[n_labeled // 33:])
         else:
             length = len(labels)
             idxs = np.array([i for i in range(length)])
             np.random.shuffle(idxs)
             train_labeled_idxs.extend(idxs[:n_labeled])
-            train_unlabeled_idxs.extend(idxs[n_labeled:-n_val])
-            val_idxs.extend(idxs[-n_val:])
+            train_unlabeled_idxs.extend(idxs[n_labeled:])
         np.random.shuffle(train_labeled_idxs)
         np.random.shuffle(train_unlabeled_idxs)
-        np.random.shuffle(val_idxs)
 
-        return train_labeled_idxs, train_unlabeled_idxs, val_idxs
+        return train_labeled_idxs, train_unlabeled_idxs
 
 
     base_dataset = TCGA_DATASET(root)
-    train_labeled_idxs, train_unlabeled_idxs, val_idxs = train_val_split_random(base_dataset.targets,n_labeled,len(base_dataset)//10)
+    train_labeled_idxs, train_unlabeled_idxs = train_val_split_random(base_dataset.targets,n_labeled,len(base_dataset)//10)
     train_labeled_dataset = TCGA_labeled(base_dataset, train_labeled_idxs,  transform=transform_train)
     train_unlabeled_dataset = TCGA_unlabeled(base_dataset, train_unlabeled_idxs,  transform=transform_train)
 
-    val_dataset = TCGA_labeled(base_dataset, val_idxs, transform=transform_val )
+    val_dataset = TCGA_DATASET( root , train=False,transform=transform_val)
 
 
     print(f"#Labeled: {len(train_labeled_dataset)}  #Val: {len(val_dataset)}")

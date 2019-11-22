@@ -3,6 +3,7 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.feature_selection import VarianceThreshold
+from sklearn.model_selection import train_test_split
 from sklearn import preprocessing  
 def feature_selection_and_sort_by_chromosome(data, annotation_path, preprocessed_file_path='data'):
     big_table = pd.read_csv(data)
@@ -29,12 +30,18 @@ def feature_selection_and_sort_by_chromosome(data, annotation_path, preprocessed
     idx2 = selector.get_support(indices=True)
     features = features[:, idx2]
     feature_name=np.array(feature_name)[idx2]
+    x_train, x_test, y_train,y_test = train_test_split( features,labels, test_size=.1, random_state=0)
+    normalise_and_save(x_train,feature_name,y_train ,'data/train.csv')
+    normalise_and_save(x_test,feature_name,y_test,'data/test.csv')
+    
 
+    
+def normalise_and_save(features,feature_name,labels,file_path='train.csv'):
     print(features.shape,len(feature_name))
     print('normalise the data in [0,1])')
     max_abs_scaler = preprocessing.MaxAbsScaler()
     features = max_abs_scaler.fit_transform(features)
-    feature_name_path = os.path.join(preprocessed_file_path, 'feature_name.csv')
+    feature_name_path = os.path.join(file_path)
     features = np.concatenate((labels.reshape(-1,1),features),axis=1)
     feature_name = np.concatenate((np.array(['label']),feature_name))
     print(features.shape,feature_name.shape)
