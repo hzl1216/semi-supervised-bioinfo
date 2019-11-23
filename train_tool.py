@@ -294,7 +294,8 @@ def semiLoss(outputs_x, targets_x, outputs_u, targets_u, class_criterion, consis
 def semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u, epoch):
     probs_u = torch.softmax(outputs_u, dim=1)
     class_loss = -torch.mean(torch.sum(F.log_softmax(outputs_x, dim=1) * targets_x, dim=1))
-    consistency_loss = torch.mean((probs_u - targets_u)**2)
+#    consistency_loss = torch.mean((probs_u - targets_u)**2)
+    consistency_loss = -torch.mean(torch.sum(F.log_softmax(outputs_u, dim=1) * targets_u, dim=1))
     consistency_weight = ramps.sigmoid_rampup(epoch, args.consistency_rampup)
     return class_loss + consistency_weight*consistency_loss, class_loss, consistency_loss*consistency_weight
 

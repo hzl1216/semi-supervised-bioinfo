@@ -31,7 +31,7 @@ def feature_selection_and_sort_by_chromosome(data, annotation_path, preprocessed
     features = features[:, idx2]
     feature_name=np.array(feature_name)[idx2]
     x_train, x_test, y_train,y_test = train_test_split( features,labels, test_size=.1, random_state=0)
-    scaler = normalise_and_save(x_train,feature_name,y_train ,'data/train.csv')
+    scaler = normalise_and_save(x_train,feature_name,y_train ,file_path='data/train.csv')
     normalise_and_save(x_test,feature_name,y_test,scaler, 'data/test.csv')
     
 
@@ -40,9 +40,10 @@ def normalise_and_save(features,feature_name,labels,scaler=None,file_path='train
     print(features.shape,len(feature_name))
     print('normalise the data in [0,1])')
     if scaler is None:
-        preprocessing.StandardScaler().fit(X_train)
-    
-    features = scaler.transform(features)
+        scaler = preprocessing.MinMaxScaler()
+        features = scaler.fit_transform(features)
+    else:
+        features = scaler.transform(features)
     feature_name_path = os.path.join(file_path)
     features = np.concatenate((labels.reshape(-1,1),features),axis=1)
     feature_name = np.concatenate((np.array(['label']),feature_name))
