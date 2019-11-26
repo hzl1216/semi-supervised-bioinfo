@@ -91,7 +91,7 @@ def create_parser(dataset):
                             help='Number of workers')
         parser.add_argument('--epoch-iteration', type=int, default=256,
                             help='Number of workers')
-        parser.add_argument('--warmup-step', type=int, default=0,
+        parser.add_argument('--warmup-step', type=int, default=1,
                             help='Number of workers')
         parser.add_argument('--alpha', default=0.75, type=float)
         parser.add_argument('--mixup', default=True, type=str2bool,

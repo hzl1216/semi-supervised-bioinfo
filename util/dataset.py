@@ -204,7 +204,17 @@ class RandomErasing(object):
                 return data
         return data
 
-
+class GaussianNoise(object):
+    """Add gaussian noise to the image.
+    """
+    def __init__(self,probability=0.5):
+        self.probability = probability
+    def __call__(self, x):
+        if random.uniform(0, 1) > self.probability:
+            return x
+        length = len(x)
+        x += np.random.randn(length) * 0.15
+        return x
 
 def get_tcga(root,n_labeled,transform_train=None,transform_val=None):
     def train_val_split_random(labels, n_labeled, randomtype='all'):
@@ -230,7 +240,7 @@ def get_tcga(root,n_labeled,transform_train=None,transform_val=None):
 
 
     base_dataset = TCGA_DATASET(root)
-    train_labeled_idxs, train_unlabeled_idxs = train_val_split_random(base_dataset.targets,n_labeled,len(base_dataset)//10)
+    train_labeled_idxs, train_unlabeled_idxs = train_val_split_random(base_dataset.targets,n_labeled)
     train_labeled_dataset = TCGA_labeled(base_dataset, train_labeled_idxs,  transform=transform_train)
     train_unlabeled_dataset = TCGA_unlabeled(base_dataset, train_unlabeled_idxs,  transform=transform_train)
 
