@@ -326,9 +326,6 @@ def confusion_matrix(preds, labels, n_class=33):
         conf_matrix[p, t] += 1
     return conf_matrix
 
-if __name__ == '__main__':
-    print(get_current_consistency_weight(0))
-
 
 
 
