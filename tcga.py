@@ -53,8 +53,8 @@ def main():
     ema_optimizer = WeightEMA(model, ema_model, tmp_model, alpha=args.ema_decay)
     cudnn.benchmark = True
     if args.warmup_step>0:
-        warmup_step = args.epochs*args.epoch_iteration//20
-        totals = warmup_step*10
+        totals = args.epochs*args.epoch_iteration
+        warmup_step = totals//20
         scheduler =  WarmupCosineSchedule(optimizer,warmup_step,totals)
     else:
         scheduler = None
