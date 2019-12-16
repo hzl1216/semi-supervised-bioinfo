@@ -97,5 +97,7 @@ def create_parser(dataset):
         parser.add_argument('--mixup', default=True, type=str2bool,
                             help='use mixup', metavar='BOOL')
         parser.add_argument('--semi', default=True, type=str2bool,
-                            help='use semi', metavar='BOOL')
+                            help='use semi supervised', metavar='BOOL')
+        parser.add_argument('--stage1', default=int, type=30,
+                            help='before stage1. train in supervised ')
     return parser.parse_args()

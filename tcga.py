@@ -87,8 +87,13 @@ def main():
         start_time = time.time()
         # train for one epoch
         if args.semi:
-            print (' train in semi-supervised')
-            class_loss, cons_loss = train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch,scheduler)
+            if epoch<args.stage1:
+                print (' train in semi-supervised stage1')
+                class_loss = train(train_labeled_loader, model, ema_model, optimizer, ema_optimizer, epoch, scheduler)
+                cons_loss = 0
+            else:
+                print (' train in semi-supervised stage2')
+                class_loss, cons_loss = train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, optimizer,ema_optimizer, epoch,scheduler)
         else:
             print (' train in supervised')
             class_loss = train(train_labeled_loader, model, ema_model, optimizer, ema_optimizer, epoch,scheduler)

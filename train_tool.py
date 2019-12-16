@@ -67,7 +67,6 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
         inputs_u = inputs_u.cuda()
 
         with torch.no_grad():
-
             ema_outputs_u = ema_model(inputs_u)
             if args.mixup:
                 ema_outputs_u = sharpen(ema_outputs_u)
