@@ -65,10 +65,10 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
         targets_x = targets_x.cuda(non_blocking=True)
         
         inputs_u = inputs_u.cuda()
-        outputs_u = model(inputs_u)
+
         with torch.no_grad():
-            ema_inputs_u = inputs_u.cuda()
-            ema_outputs_u = ema_model(ema_inputs_u)
+
+            ema_outputs_u = ema_model(inputs_u)
             if args.mixup:
                 ema_outputs_u = sharpen(ema_outputs_u)
             ema_outputs_u = ema_outputs_u.detach()
@@ -80,7 +80,7 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
             loss,class_loss ,consistency_loss = semiloss_mixup(outputs_x, targets_x, outputs_u, targets_u,epoch)
         else:
             outputs_x = model(inputs_x)
-
+            outputs_u = model(inputs_u)
             loss,class_loss ,consistency_loss = semiLoss(outputs_x, targets_x, outputs_u, ema_outputs_u, class_criterion, consistency_criterion,epoch)
 
         meters.update('loss', loss.item())
@@ -111,6 +111,78 @@ def train_semi(train_labeled_loader, train_unlabeled_loader, model, ema_model, o
 #    ema_optimizer.step(bn=True)
     return meters.averages()['class_loss/avg'],meters.averages()['cons_loss/avg']
 
+
+def train(train_labeled_loader, model, ema_model, optimizer, ema_optimizer, epoch,
+               scheduler=None):
+    labeled_train_iter = iter(train_labeled_loader)
+    class_criterion = nn.CrossEntropyLoss().cuda()
+    meters = AverageMeterSet()
+
+    # switch to train mode
+    model.train()
+    ema_model.train()
+
+    end = time.time()
+    for i in range(args.epoch_iteration):
+        try:
+            inputs_x, targets_x = labeled_train_iter.next()
+        except:
+            labeled_train_iter = iter(train_labeled_loader)
+            inputs_x, targets_x = labeled_train_iter.next()
+
+        # measure data loading time
+        meters.update('data_time', time.time() - end)
+
+        inputs_x = inputs_x.cuda()
+        batch_size = inputs_x.size(0)
+        targets_x_onehot = torch.zeros(batch_size, 33).scatter_(1, targets_x.view(-1, 1), 1)
+        targets_x = targets_x.cuda(non_blocking=True)
+
+        if args.mixup:
+            targets_x = targets_x_onehot.cuda()
+            all_inputs = torch.cat([inputs_x], dim=0)
+            all_targets = torch.cat([targets_x], dim=0)
+            l = np.random.beta(args.alpha, args.alpha)
+
+            l = max(l, 1 - l)
+
+            idx = torch.randperm(all_inputs.size(0))
+
+            input_a, input_b = all_inputs, all_inputs[idx]
+            target_a, target_b = all_targets, all_targets[idx]
+            mixed_input = l * input_a + (1 - l) * input_b
+            mixed_target = l * target_a + (1 - l) * target_b
+            mixed_outputs = model(mixed_input)
+            loss = -torch.mean(torch.sum(F.log_softmax(mixed_outputs, dim=1) * mixed_target, dim=1))
+        else:
+            outputs_x = model(inputs_x)
+
+            loss=class_criterion(outputs_x, targets_x)
+
+        meters.update('loss', loss.item())
+
+        # compute gradient and do SGD step
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        ema_optimizer.step()
+        ema_optimizer.step(bn=True)
+        if scheduler is not None:
+            scheduler.step()
+
+        # measure elapsed time
+        meters.update('batch_time', time.time() - end)
+        end = time.time()
+
+        if i % args.print_freq == 0:
+            print(
+                'Epoch: [{0}][{1}/{2}]\t'
+                'Time {meters[batch_time]:.3f}\t'
+                'Data {meters[data_time]:.3f}\t'
+                'loss {meters[loss]:.4f}\t'.format(
+                    epoch, i, args.epoch_iteration, meters=meters))
+    #    ema_optimizer.step(bn=True)
+    return meters.averages()['loss/avg']
 
 def validate(val_loader, model, criterion,epoch):
     batch_time = AverageMeter()

@@ -90,17 +90,30 @@ def main():
         print("--- training epoch in %s seconds ---" % (time.time() - start_time))
 
         if args.evaluation_epochs and (epoch + 1) % args.evaluation_epochs == 0:
-            start_time = time.time()
-            print("Evaluating the  model:")
-            val_loss, val_acc = validate(eval_loader, model, criterion,epoch)
-            print("--- validation in %s seconds ---" % (time.time() - start_time))
-            logger.append([epoch, class_loss, cons_loss, val_loss, val_acc])
+            if args.semi:
+                print (' train in semi-supervised')
+                start_time = time.time()
+                print("Evaluating the  model:")
+                val_loss, val_acc = validate(eval_loader, model, criterion,epoch)
+                print("--- validation in %s seconds ---" % (time.time() - start_time))
+                logger.append([epoch, class_loss, cons_loss, val_loss, val_acc])
 
-            print("Evaluating the EMA model:")
-            ema_val_loss, ema_val_acc = validate(eval_loader, ema_model, criterion,epoch)
-            print("--- validation in %s seconds ---" % (time.time() - start_time))
-            logger.append([epoch, class_loss, cons_loss, ema_val_loss, ema_val_acc])
+                print("Evaluating the EMA model:")
+                ema_val_loss, ema_val_acc = validate(eval_loader, ema_model, criterion,epoch)
+                print("--- validation in %s seconds ---" % (time.time() - start_time))
+                logger.append([epoch, class_loss, cons_loss, ema_val_loss, ema_val_acc])
+            else:
+                print (' train in supervised')
+                start_time = time.time()
+                print("Evaluating the  model:")
+                val_loss, val_acc = validate(eval_loader, model, criterion, epoch)
+                print("--- validation in %s seconds ---" % (time.time() - start_time))
+                logger.append([epoch, class_loss, 0, val_loss, val_acc])
 
+                print("Evaluating the EMA model:")
+                ema_val_loss, ema_val_acc = validate(eval_loader, ema_model, criterion, epoch)
+                print("--- validation in %s seconds ---" % (time.time() - start_time))
+                logger.append([epoch, class_loss, 0, ema_val_loss, ema_val_acc])
         if args.checkpoint_epochs and (epoch + 1) % args.checkpoint_epochs == 0:
             save_checkpoint({
                 'epoch': epoch + 1,

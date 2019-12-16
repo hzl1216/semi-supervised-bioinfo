@@ -96,4 +96,6 @@ def create_parser(dataset):
         parser.add_argument('--alpha', default=0.75, type=float)
         parser.add_argument('--mixup', default=True, type=str2bool,
                             help='use mixup', metavar='BOOL')
+        parser.add_argument('--semi', default=True, type=str2bool,
+                            help='use semi', metavar='BOOL')
     return parser.parse_args()
