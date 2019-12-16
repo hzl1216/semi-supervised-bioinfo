@@ -1,0 +1,11 @@
+.idea/
+*.swp
+
+data/
+result/
+checkpoint_path/
+__pycache__/
+nohup.out
+test.py
+*.sh
+*.npy
